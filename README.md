@@ -1,4 +1,4 @@
-# GPT: Advanced Implementation with Unlimited Context
+# GPT
 
 A powerful, efficient implementation for training and using GPT models, now with unlimited context capability. This repository extends the [minGPT](https://github.com/karpathy/minGPT) foundation with advanced features while maintaining its clean, readable codebase.
 
