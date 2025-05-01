@@ -227,7 +227,7 @@ class GPT(nn.Module):
         if 'dropout' in override_args:
             print(f"overriding dropout rate to {override_args['dropout']}")
             config_args['dropout'] = override_args['dropout']
-        # create a from-scratch initialized minGPT model
+        # create a from-scratch initialized GPT model
         config = GPTConfig(**config_args)
         model = GPT(config)
         sd = model.state_dict()
