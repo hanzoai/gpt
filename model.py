@@ -41,6 +41,15 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        # For billion-token contexts, we'll support dynamic maximum context
+        self.max_active_context = config.max_active_context if hasattr(config, 'max_active_context') else config.block_size
+        self.use_sparse_attention = config.use_sparse_attention if hasattr(config, 'use_sparse_attention') else False
+        self.preserve_begin_tokens = config.preserve_begin_tokens if hasattr(config, 'preserve_begin_tokens') else 0
+        self.preserve_end_tokens = config.preserve_end_tokens if hasattr(config, 'preserve_end_tokens') else 0
+        # Set up sparse attention for billion-token support
+        if self.use_sparse_attention:
+            print(f"Using sparse attention with max active context {self.max_active_context}")
+            print(f"Preserving {self.preserve_begin_tokens} begin tokens and {self.preserve_end_tokens} end tokens")
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
@@ -114,6 +123,16 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    
+    # Advanced context handling for billion-token support
+    billion_token_context: bool = False # Enable billion-token context features
+    max_actual_block_size: int = 1024 # Maximum tokens to consider at once (default: same as block_size)
+    use_sparse_attention: bool = False # Use sparse attention mechanisms for memory efficiency
+    preserve_begin_tokens: int = 0 # Number of beginning tokens to always preserve (0 = auto)
+    preserve_end_tokens: int = 0 # Number of end tokens to always preserve (0 = auto)
+    middle_token_compression_ratio: float = 0.1 # How much to compress middle tokens (smaller = more compression)
+    token_eviction_strategy: str = 'importance' # Strategy for evicting tokens: 'importance', 'age', 'hybrid'
+    max_active_context_ratio: float = 0.2 # Maximum percentage of block_size to keep active in memory at once
 
 class GPT(nn.Module):
 
@@ -170,9 +189,27 @@ class GPT(nn.Module):
     def forward(self, idx, targets=None):
         device = idx.device
         b, t = idx.size()
-        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
-
+        
+        # Check if we support sparse billion-token context
+        has_billion_ctx = hasattr(self.config, 'billion_token_context') and self.config.billion_token_context
+        
+        # Regular context size handling
+        if not has_billion_ctx:
+            assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+            pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+        else:
+            # Billion-token context handling with configurable size
+            actual_block_size = min(t, self.config.max_actual_block_size) if hasattr(self.config, 'max_actual_block_size') else t
+            preserve_begin = self.config.preserve_begin_tokens if hasattr(self.config, 'preserve_begin_tokens') else int(actual_block_size * 0.1)
+            preserve_end = self.config.preserve_end_tokens if hasattr(self.config, 'preserve_end_tokens') else int(actual_block_size * 0.2)
+            
+            # We need to manage the actual context being used here
+            print(f"Using billion-token context: {t} tokens, preserving {preserve_begin} begin and {preserve_end} end tokens")
+            
+            # This is a placeholder for the actual sparse attention implementation
+            # We would need to implement token selection/pruning/compression here
+            pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+            
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)

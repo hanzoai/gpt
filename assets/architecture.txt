@@ -1,0 +1,40 @@
+GPT Implementation with Unlimited Context
+├── model.py              # Core GPT definition
+│   ├── GPTConfig         # Model configuration
+│   └── GPT               # Base GPT implementation
+│
+├── utils/                # Utility modules
+│   ├── dynamic_context.py        # Unlimited context system
+│   │   ├── DynamicContextManager # Manages context with unlimited length
+│   │   └── CircularTokenBuffer   # Efficient token storage with eviction
+│   │
+│   ├── sparse_attention.py       # Sparse attention mechanisms
+│   │   ├── SparseAttentionManager  # Manages sparse attention patterns
+│   │   └── TokenImportanceTracker  # Tracks token importance for eviction
+│   │
+│   └── version_manager.py        # Version management
+│       ├── create_model          # Creates models of different GPT versions
+│       └── enable_unlimited_context # Enables unlimited context capability
+│
+├── models/               # Model implementations
+│   ├── gpt2_model.py     # GPT-2 implementation
+│   ├── gpt3_model.py     # GPT-3 implementation
+│   ├── gpt3.5_model.py   # GPT-3.5 implementation
+│   ├── gpt4_model.py     # GPT-4 implementation (MoE)
+│   ├── gpt4.5_model.py   # GPT-4.5 implementation (Enhanced MoE)
+│   └── gpt5_model.py     # GPT-5 implementation (Unlimited context)
+│
+├── configs/              # Model configurations
+│   ├── gpt2_config.py    # GPT-2 configuration
+│   ├── gpt3_config.py    # GPT-3 configuration
+│   ├── gpt3.5_config.py  # GPT-3.5 configuration
+│   ├── gpt4_config.py    # GPT-4 configuration
+│   ├── gpt4.5_config.py  # GPT-4.5 configuration
+│   └── gpt5_config.py    # GPT-5 configuration
+│
+├── train.py             # Training script
+├── sample.py            # Generation script
+└── demos/               # Demonstration scripts
+    ├── simple_demo.py           # Simple unlimited context demo
+    ├── unlimited_context_demo.py # Comprehensive unlimited context demo
+    └── version_demo.py          # Version switching demo
