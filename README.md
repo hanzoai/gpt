@@ -1,145 +1,225 @@
 
 # GPT
 
-A PyTorch re-implementation of [GPT](https://github.com/openai/gpt-2), both training and inference. GPT tries to be small, clean, interpretable and educational, as most of the currently available GPT model implementations can a bit sprawling. GPT is not a complicated model and this implementation is appropriately about 300 lines of code (see [gpt/model.py](gpt/model.py)). All that's going on is that a sequence of indices feeds into a [Transformer](https://arxiv.org/abs/1706.03762), and a probability distribution over the next index in the sequence comes out. The majority of the complexity is just being clever with batching (both across examples and over sequence length) for efficiency.
+The simplest, fastest repository for training/finetuning medium-sized GPTs. It is a rewrite of [minGPT](https://github.com/karpathy/minGPT) that prioritizes teeth over education. Still under active development, but currently the file `train.py` reproduces GPT-2 (124M) on OpenWebText, running on a single 8XA100 40GB node in about 4 days of training. The code itself is plain and readable: `train.py` is a ~300-line boilerplate training loop and `model.py` a ~300-line GPT model definition, which can optionally load the GPT-2 weights from OpenAI. That's it.
 
-**note (Jan 2023)**: though I may continue to accept and change some details, GPT is in a semi-archived state. For more recent developments see my rewrite [nanoGPT](https://github.com/karpathy/nanoGPT). Basically, GPT became referenced across a wide variety of places (notebooks, blogs, courses, books, etc.) which made me less willing to make the bigger changes I wanted to make to move the code forward. I also wanted to change the direction a bit, from a sole focus on education to something that is still simple and hackable but has teeth (reproduces medium-sized industry benchmarks, accepts some tradeoffs to gain runtime efficiency, etc).
+![repro124m](assets/gpt2_124M_loss.png)
 
-The GPT library is three files: [gpt/model.py](gpt/model.py) contains the actual Transformer model definition, [gpt/bpe.py](gpt/bpe.py) contains a mildly refactored Byte Pair Encoder that translates between text and sequences of integers exactly like OpenAI did in GPT, [gpt/trainer.py](gpt/trainer.py) is (GPT-independent) PyTorch boilerplate code that trains the model. Then there are a number of demos and projects that use the library in the `projects` folder:
+Because the code is so simple, it is very easy to hack to your needs, train new models from scratch, or finetune pretrained checkpoints (e.g. biggest one currently available as a starting point would be the GPT-2 1.3B model from OpenAI).
 
-- `projects/adder` trains a GPT from scratch to add numbers (inspired by the addition section in the GPT-3 paper)
-- `projects/chargpt` trains a GPT to be a character-level language model on some input text file
-- `demo.ipynb` shows a minimal usage of the `GPT` and `Trainer` in a notebook format on a simple sorting example
-- `generate.ipynb` shows how one can load a pretrained GPT2 and generate text given some prompt
-
-### Library Installation
-
-If you want to `import gpt` into your project:
+## install
 
 ```
-git clone https://github.com/hanzoai/gpt.git
-cd gpt
-pip install -e .
+pip install torch numpy transformers datasets tiktoken wandb tqdm
 ```
 
-### Usage
+Dependencies:
 
-Here's how you'd instantiate a GPT-2 (124M param version):
+- [pytorch](https://pytorch.org) <3
+- [numpy](https://numpy.org/install/) <3
+-  `transformers` for huggingface transformers <3 (to load GPT-2 checkpoints)
+-  `datasets` for huggingface datasets <3 (if you want to download + preprocess OpenWebText)
+-  `tiktoken` for OpenAI's fast BPE code <3
+-  `wandb` for optional logging <3
+-  `tqdm` for progress bars <3
 
-```python
-from gpt.model import GPT
-model_config = GPT.get_default_config()
-model_config.model_type = 'gpt2'
-model_config.vocab_size = 50257 # openai's model vocabulary
-model_config.block_size = 1024  # openai's model block_size (i.e. input context length)
-model = GPT(model_config)
+## quick start
+
+If you are not a deep learning professional and you just want to feel the magic and get your feet wet, the fastest way to get started is to train a character-level GPT on the works of Shakespeare. First, we download it as a single (1MB) file and turn it from raw text into one large stream of integers:
+
+```sh
+python data/shakespeare_char/prepare.py
 ```
 
-And here's how you'd train it:
+This creates a `train.bin` and `val.bin` in that data directory. Now it is time to train your GPT. The size of it very much depends on the computational resources of your system:
 
-```python
-# your subclass of torch.utils.data.Dataset that emits example
-# torch LongTensor of lengths up to 1024, with integers from [0,50257)
-train_dataset = YourDataset()
+**I have a GPU**. Great, we can quickly train a baby GPT with the settings provided in the [config/train_shakespeare_char.py](config/train_shakespeare_char.py) config file:
 
-from gpt.trainer import Trainer
-train_config = Trainer.get_default_config()
-train_config.learning_rate = 5e-4 # many possible options, see the file
-train_config.max_iters = 1000
-train_config.batch_size = 32
-trainer = Trainer(train_config, model, train_dataset)
-trainer.run()
+```sh
+python train.py config/train_shakespeare_char.py
 ```
 
-See `demo.ipynb` for a more concrete example.
+If you peek inside it, you'll see that we're training a GPT with a context size of up to 256 characters, 384 feature channels, and it is a 6-layer Transformer with 6 heads in each layer. On one A100 GPU this training run takes about 3 minutes and the best validation loss is 1.4697. Based on the configuration, the model checkpoints are being written into the `--out_dir` directory `out-shakespeare-char`. So once the training finishes we can sample from the best model by pointing the sampling script at this directory:
 
-### Unit tests
-
-Coverage is not super amazing just yet but:
-
-```
-python -m unittest discover tests
+```sh
+python sample.py --out_dir=out-shakespeare-char
 ```
 
-### todos
+This generates a few samples, for example:
 
-- add gpt-2 finetuning demo on arbitrary given text file
-- add dialog agent demo
-- better docs of outcomes for existing projects (adder, chargpt)
-- add mixed precision and related training scaling goodies
-- distributed training support
-- reproduce some benchmarks in projects/, e.g. text8 or other language modeling
-- proper logging instead of print statement amateur hour haha
-- i probably should have a requirements.txt file...
-- it should be possible to load in many other model weights other than just gpt2-\*
+```
+ANGELO:
+And cowards it be strawn to my bed,
+And thrust the gates of my threats,
+Because he that ale away, and hang'd
+An one with him.
 
-### References
+DUKE VINCENTIO:
+I thank your eyes against it.
 
-Code:
+DUKE VINCENTIO:
+Then will answer him to save the malm:
+And what have you tyrannous shall do this?
 
-- [openai/gpt-2](https://github.com/openai/gpt-2) has the model definition in TensorFlow, but not the training code
-- [openai/image-gpt](https://github.com/openai/image-gpt) has some more modern gpt-3 like modification in its code, good reference as well
-- [huggingface/transformers](https://github.com/huggingface/transformers) has a [language-modeling example](https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling). It is full-featured but as a result also somewhat challenging to trace. E.g. some large functions have as much as 90% unused code behind various branching statements that is unused in the default setting of simple language modeling
+DUKE VINCENTIO:
+If you have done evils of all disposition
+To end his power, the day of thrust for a common men
+That I leave, to fight with over-liking
+Hasting in a roseman.
+```
 
-Papers + some implementation notes:
+lol  `¯\_(ツ)_/¯`. Not bad for a character-level model after 3 minutes of training on a GPU. Better results are quite likely obtainable by instead finetuning a pretrained GPT-2 model on this dataset (see finetuning section later).
 
-#### Improving Language Understanding by Generative Pre-Training (GPT-1)
+**I only have a macbook** (or other cheap computer). No worries, we can still train a GPT but we want to dial things down a notch. I recommend getting the bleeding edge PyTorch nightly ([select it here](https://pytorch.org/get-started/locally/) when installing) as it is currently quite likely to make your code more efficient. But even without it, a simple train run could look as follows:
 
-- Our model largely follows the original transformer work
-- We trained a 12-layer decoder-only transformer with masked self-attention heads (768 dimensional states and 12 attention heads). For the position-wise feed-forward networks, we used 3072 dimensional inner states.
-- Adam max learning rate of 2.5e-4. (later GPT-3 for this model size uses 6e-4)
-- LR decay: increased linearly from zero over the first 2000 updates and annealed to 0 using a cosine schedule
-- We train for 100 epochs on minibatches of 64 randomly sampled, contiguous sequences of 512 tokens.
-- Since layernorm is used extensively throughout the model, a simple weight initialization of N(0, 0.02) was sufficient
-- bytepair encoding (BPE) vocabulary with 40,000 merges
-- residual, embedding, and attention dropouts with a rate of 0.1 for regularization.
-- modified version of L2 regularization proposed in (37), with w = 0.01 on all non bias or gain weights
-- For the activation function, we used the Gaussian Error Linear Unit (GELU).
-- We used learned position embeddings instead of the sinusoidal version proposed in the original work
-- For finetuning: We add dropout to the classifier with a rate of 0.1. learning rate of 6.25e-5 and a batchsize of 32. 3 epochs. We use a linear learning rate decay schedule with warmup over 0.2% of training. λ was set to 0.5.
-- GPT-1 model is 12 layers and d_model 768, ~117M params
+```sh
+python train.py config/train_shakespeare_char.py --device=cpu --compile=False --eval_iters=20 --log_interval=1 --block_size=64 --batch_size=12 --n_layer=4 --n_head=4 --n_embd=128 --max_iters=2000 --lr_decay_iters=2000 --dropout=0.0
+```
 
-#### Language Models are Unsupervised Multitask Learners (GPT-2)
+Here, since we are running on CPU instead of GPU we must set both `--device=cpu` and also turn off PyTorch 2.0 compile with `--compile=False`. Then when we evaluate we get a bit more noisy but faster estimate (`--eval_iters=20`, down from 200), our context size is only 64 characters instead of 256, and the batch size only 12 examples per iteration, not 64. We'll also use a much smaller Transformer (4 layers, 4 heads, 128 embedding size), and decrease the number of iterations to 2000 (and correspondingly usually decay the learning rate to around max_iters with `--lr_decay_iters`). Because our network is so small we also ease down on regularization (`--dropout=0.0`). This still runs in about ~3 minutes, but gets us a loss of only 1.88 and therefore also worse samples, but it's still good fun:
 
-- LayerNorm was moved to the input of each sub-block, similar to a pre-activation residual network
-- an additional layer normalization was added after the final self-attention block.
-- modified initialization which accounts for the accumulation on the residual path with model depth is used. We scale the weights of residual layers at initialization by a factor of 1/√N where N is the number of residual layers. (weird because in their released code i can only find a simple use of the old 0.02... in their release of image-gpt I found it used for c_proj, and even then only for attn, not for mlp. huh. https://github.com/openai/image-gpt/blob/master/src/model.py)
-- the vocabulary is expanded to 50,257
-- increase the context size from 512 to 1024 tokens
-- larger batchsize of 512 is used
-- GPT-2 used 48 layers and d_model 1600 (vs. original 12 layers and d_model 768). ~1.542B params
+```sh
+python sample.py --out_dir=out-shakespeare-char --device=cpu
+```
+Generates samples like this:
 
-#### Language Models are Few-Shot Learners (GPT-3)
+```
+GLEORKEN VINGHARD III:
+Whell's the couse, the came light gacks,
+And the for mought you in Aut fries the not high shee
+bot thou the sought bechive in that to doth groan you,
+No relving thee post mose the wear
+```
 
-- GPT-3: 96 layers, 96 heads, with d_model of 12,288 (175B parameters).
-- GPT-1-like: 12 layers, 12 heads, d_model 768 (125M)
-- We use the same model and architecture as GPT-2, including the modified initialization, pre-normalization, and reversible tokenization described therein
-- we use alternating dense and locally banded sparse attention patterns in the layers of the transformer, similar to the Sparse Transformer
-- we always have the feedforward layer four times the size of the bottleneck layer, dff = 4 ∗ dmodel
-- all models use a context window of nctx = 2048 tokens.
-- Adam with β1 = 0.9, β2 = 0.95, and eps = 10−8
-- All models use weight decay of 0.1 to provide a small amount of regularization. (NOTE: GPT-1 used 0.01 I believe, see above)
-- clip the global norm of the gradient at 1.0
-- Linear LR warmup over the first 375 million tokens. Then use cosine decay for learning rate down to 10% of its value, over 260 billion tokens.
-- gradually increase the batch size linearly from a small value (32k tokens) to the full value over the first 4-12 billion tokens of training, depending on the model size.
-- full 2048-sized time context window is always used, with a special END OF DOCUMENT token delimiter
+Not bad for ~3 minutes on a CPU, for a hint of the right character gestalt. If you're willing to wait longer, feel free to tune the hyperparameters, increase the size of the network, the context length (`--block_size`), the length of training, etc.
 
-#### Generative Pretraining from Pixels (Image GPT)
+Finally, on Apple Silicon Macbooks and with a recent PyTorch version make sure to add `--device=mps` (short for "Metal Performance Shaders"); PyTorch then uses the on-chip GPU that can *significantly* accelerate training (2-3X) and allow you to use larger networks. See [Issue 28](https://github.com/karpathy/GPT/issues/28) for more.
 
-- When working with images, we pick the identity permutation πi = i for 1 ≤ i ≤ n, also known as raster order.
-- we create our own 9-bit color palette by clustering (R, G, B) pixel values using k-means with k = 512.
-- Our largest model, iGPT-XL, contains L = 60 layers and uses an embedding size of d = 3072 for a total of 6.8B parameters.
-- Our next largest model, iGPT-L, is essentially identical to GPT-2 with L = 48 layers, but contains a slightly smaller embedding size of d = 1536 (vs 1600) for a total of 1.4B parameters.
-- We use the same model code as GPT-2, except that we initialize weights in the layerdependent fashion as in Sparse Transformer (Child et al., 2019) and zero-initialize all projections producing logits.
-- We also train iGPT-M, a 455M parameter model with L = 36 and d = 1024
-- iGPT-S, a 76M parameter model with L = 24 and d = 512 (okay, and how many heads? looks like the Github code claims 8)
-- When pre-training iGPT-XL, we use a batch size of 64 and train for 2M iterations, and for all other models we use a batch size of 128 and train for 1M iterations.
-- Adam with β1 = 0.9 and β2 = 0.95
-- The learning rate is warmed up for one epoch, and then decays to 0
-- We did not use weight decay because applying a small weight decay of 0.01 did not change representation quality.
-- iGPT-S lr 0.003
-- No dropout is used.
+## reproducing GPT-2
 
-### License
+A more serious deep learning professional may be more interested in reproducing GPT-2 results. So here we go - we first tokenize the dataset, in this case the [OpenWebText](https://openwebtext2.readthedocs.io/en/latest/), an open reproduction of OpenAI's (private) WebText:
 
-MIT
+```sh
+python data/openwebtext/prepare.py
+```
+
+This downloads and tokenizes the [OpenWebText](https://huggingface.co/datasets/openwebtext) dataset. It will create a `train.bin` and `val.bin` which holds the GPT2 BPE token ids in one sequence, stored as raw uint16 bytes. Then we're ready to kick off training. To reproduce GPT-2 (124M) you'll want at least an 8X A100 40GB node and run:
+
+```sh
+torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
+```
+
+This will run for about 4 days using PyTorch Distributed Data Parallel (DDP) and go down to loss of ~2.85. Now, a GPT-2 model just evaluated on OWT gets a val loss of about 3.11, but if you finetune it it will come down to ~2.85 territory (due to an apparent domain gap), making the two models ~match.
+
+If you're in a cluster environment and you are blessed with multiple GPU nodes you can make GPU go brrrr e.g. across 2 nodes like:
+
+```sh
+# Run on the first (master) node with example IP 123.456.123.456:
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
+# Run on the worker node:
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
+```
+
+It is a good idea to benchmark your interconnect (e.g. iperf3). In particular, if you don't have Infiniband then also prepend `NCCL_IB_DISABLE=1` to the above launches. Your multinode training will work, but most likely _crawl_. By default checkpoints are periodically written to the `--out_dir`. We can sample from the model by simply `python sample.py`.
+
+Finally, to train on a single GPU simply run the `python train.py` script. Have a look at all of its args, the script tries to be very readable, hackable and transparent. You'll most likely want to tune a number of those variables depending on your needs.
+
+## baselines
+
+OpenAI GPT-2 checkpoints allow us to get some baselines in place for openwebtext. We can get the numbers as follows:
+
+```sh
+$ python train.py config/eval_gpt2.py
+$ python train.py config/eval_gpt2_medium.py
+$ python train.py config/eval_gpt2_large.py
+$ python train.py config/eval_gpt2_xl.py
+```
+
+and observe the following losses on train and val:
+
+| model | params | train loss | val loss |
+| ------| ------ | ---------- | -------- |
+| gpt2 | 124M         | 3.11  | 3.12     |
+| gpt2-medium | 350M  | 2.85  | 2.84     |
+| gpt2-large | 774M   | 2.66  | 2.67     |
+| gpt2-xl | 1558M     | 2.56  | 2.54     |
+
+However, we have to note that GPT-2 was trained on (closed, never released) WebText, while OpenWebText is just a best-effort open reproduction of this dataset. This means there is a dataset domain gap. Indeed, taking the GPT-2 (124M) checkpoint and finetuning on OWT directly for a while reaches loss down to ~2.85. This then becomes the more appropriate baseline w.r.t. reproduction.
+
+## finetuning
+
+Finetuning is no different than training, we just make sure to initialize from a pretrained model and train with a smaller learning rate. For an example of how to finetune a GPT on new text go to `data/shakespeare` and run `prepare.py` to download the tiny shakespeare dataset and render it into a `train.bin` and `val.bin`, using the OpenAI BPE tokenizer from GPT-2. Unlike OpenWebText this will run in seconds. Finetuning can take very little time, e.g. on a single GPU just a few minutes. Run an example finetuning like:
+
+```sh
+python train.py config/finetune_shakespeare.py
+```
+
+This will load the config parameter overrides in `config/finetune_shakespeare.py` (I didn't tune them much though). Basically, we initialize from a GPT2 checkpoint with `init_from` and train as normal, except shorter and with a small learning rate. If you're running out of memory try decreasing the model size (they are `{'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}`) or possibly decreasing the `block_size` (context length). The best checkpoint (lowest validation loss) will be in the `out_dir` directory, e.g. in `out-shakespeare` by default, per the config file. You can then run the code in `sample.py --out_dir=out-shakespeare`:
+
+```
+THEODORE:
+Thou shalt sell me to the highest bidder: if I die,
+I sell thee to the first; if I go mad,
+I sell thee to the second; if I
+lie, I sell thee to the third; if I slay,
+I sell thee to the fourth: so buy or sell,
+I tell thee again, thou shalt not sell my
+possession.
+
+JULIET:
+And if thou steal, thou shalt not sell thyself.
+
+THEODORE:
+I do not steal; I sell the stolen goods.
+
+THEODORE:
+Thou know'st not what thou sell'st; thou, a woman,
+Thou art ever a victim, a thing of no worth:
+Thou hast no right, no right, but to be sold.
+```
+
+Whoa there, GPT, entering some dark place over there. I didn't really tune the hyperparameters in the config too much, feel free to try!
+
+## sampling / inference
+
+Use the script `sample.py` to sample either from pre-trained GPT-2 models released by OpenAI, or from a model you trained yourself. For example, here is a way to sample from the largest available `gpt2-xl` model:
+
+```sh
+python sample.py \
+    --init_from=gpt2-xl \
+    --start="What is the answer to life, the universe, and everything?" \
+    --num_samples=5 --max_new_tokens=100
+```
+
+If you'd like to sample from a model you trained, use the `--out_dir` to point the code appropriately. You can also prompt the model with some text from a file, e.g. ```python sample.py --start=FILE:prompt.txt```.
+
+## efficiency notes
+
+For simple model benchmarking and profiling, `bench.py` might be useful. It's identical to what happens in the meat of the training loop of `train.py`, but omits much of the other complexities.
+
+Note that the code by default uses [PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/). At the time of writing (Dec 29, 2022) this makes `torch.compile()` available in the nightly release. The improvement from the one line of code is noticeable, e.g. cutting down iteration time from ~250ms / iter to 135ms / iter. Nice work PyTorch team!
+
+## todos
+
+- Investigate and add FSDP instead of DDP
+- Eval zero-shot perplexities on standard evals (e.g. LAMBADA? HELM? etc.)
+- Finetune the finetuning script, I think the hyperparams are not great
+- Schedule for linear batch size increase during training
+- Incorporate other embeddings (rotary, alibi)
+- Separate out the optim buffers from model params in checkpoints I think
+- Additional logging around network health (e.g. gradient clip events, magnitudes)
+- Few more investigations around better init etc.
+
+## troubleshooting
+
+Note that by default this repo uses PyTorch 2.0 (i.e. `torch.compile`). This is fairly new and experimental, and not yet available on all platforms (e.g. Windows). If you're running into related error messages try to disable this by adding `--compile=False` flag. This will slow down the code but at least it will run.
+
+For some context on this repository, GPT, and language modeling it might be helpful to watch my [Zero To Hero series](https://karpathy.ai/zero-to-hero.html). Specifically, the [GPT video](https://www.youtube.com/watch?v=kCc8FmEb1nY) is popular if you have some prior language modeling context.
+
+For more questions/discussions feel free to stop by **#GPT** on Discord:
+
+[![](https://dcbadge.vercel.app/api/server/XthHQQj?compact=true&style=flat)](https://discord.gg/XthHQQj)
+
+## acknowledgements
+
+All GPT experiments are powered by GPUs on [Lambda labs](https://lambdalabs.com), my favorite Cloud GPU provider. Thank you Lambda labs for sponsoring GPT!
