@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/hero.svg" alt="gpt" width="880"></p>
+
 # GPT
 
 A powerful, efficient implementation for training and using GPT models, now with unlimited context capability. This repository extends the [minGPT](https://github.com/karpathy/minGPT) foundation with advanced features while maintaining its clean, readable codebase.
