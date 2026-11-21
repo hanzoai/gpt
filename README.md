@@ -2,6 +2,8 @@
 
 # GPT
 
+[![Open in Hanzo](https://hanzo.app/badges/open-in-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/gpt&ref=main&action=open) [![Edit with Hanzo](https://hanzo.app/badges/edit-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/gpt&ref=main&action=edit)
+
 A powerful, efficient implementation for training and using GPT models, now with unlimited context capability. This repository extends the [minGPT](https://github.com/karpathy/minGPT) foundation with advanced features while maintaining its clean, readable codebase.
 
 ![repro124m](assets/gpt2_124M_loss.png)
